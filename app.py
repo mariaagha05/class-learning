@@ -6,10 +6,15 @@ Run with:  streamlit run app.py
 """
 
 import copy
+import hashlib
+import hmac
 import html
 import json
 import os
 import random
+import re
+import secrets
+import time
 from datetime import date, timedelta
 from pathlib import Path
 from typing import Optional
@@ -19,7 +24,12 @@ import streamlit as st
 # ----------------------------------------------------------------------------
 # Config
 # ----------------------------------------------------------------------------
-DATA_FILE = Path(__file__).with_name("habit_data.json")
+USERS_FILE = Path(__file__).with_name("users.json")      # usernames + hashed passwords
+DATA_DIR = Path(__file__).with_name("user_data")         # one JSON file per user
+LEGACY_FILE = Path(__file__).with_name("habit_data.json")  # old single-user file
+USERNAME_RE = re.compile(r"^[a-z0-9_]{3,20}$")
+PBKDF2_ROUNDS = 200_000
+MIN_PASSWORD_LENGTH = 6
 GROQ_MODEL = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
 
 XP_PER_LEVEL = 100
@@ -58,8 +68,11 @@ def _valid_date(value) -> Optional[str]:
 def load_data() -> dict:
     """Load saved data. Fall back to defaults if the file is missing or corrupted."""
     data = copy.deepcopy(DEFAULT_DATA)
+    user = current_user()
+    if not user:
+        return data
     try:
-        raw = json.loads(DATA_FILE.read_text(encoding="utf-8"))
+        raw = json.loads(user_data_path(user).read_text(encoding="utf-8"))
         if not isinstance(raw, dict):
             return data
         data["habit_name"] = str(raw.get("habit_name", ""))[:40]
@@ -80,8 +93,89 @@ def load_data() -> dict:
 
 
 def save_data(data: dict) -> None:
-    """Write data to the local JSON file."""
-    DATA_FILE.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    """Write the logged-in user's data to their own JSON file."""
+    user = current_user()
+    if not user:
+        return
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    user_data_path(user).write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+
+# ----------------------------------------------------------------------------
+# Accounts (local sign up / log in). Passwords are never stored in plain text:
+# each one is salted and hashed with PBKDF2-SHA256.
+# ----------------------------------------------------------------------------
+def current_user() -> Optional[str]:
+    return st.session_state.get("user")
+
+
+def user_data_path(username: str) -> Path:
+    # The username regex only allows a-z, 0-9 and _, so this path is always safe.
+    return DATA_DIR / f"{username}.json"
+
+
+def load_users() -> dict:
+    try:
+        users = json.loads(USERS_FILE.read_text(encoding="utf-8"))
+        return users if isinstance(users, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def save_users(users: dict) -> None:
+    USERS_FILE.write_text(json.dumps(users, indent=2), encoding="utf-8")
+
+
+def hash_password(password: str, salt_hex: str) -> str:
+    return hashlib.pbkdf2_hmac(
+        "sha256", password.encode("utf-8"), bytes.fromhex(salt_hex), PBKDF2_ROUNDS
+    ).hex()
+
+
+def create_account(username: str, password: str, confirm: str) -> Optional[str]:
+    """Create an account and log in. Returns an error message, or None on success."""
+    username = username.strip().lower()
+    if not USERNAME_RE.match(username):
+        return "Username must be 3-20 characters: letters, numbers or underscore."
+    if len(password) < MIN_PASSWORD_LENGTH:
+        return f"Password must be at least {MIN_PASSWORD_LENGTH} characters."
+    if password != confirm:
+        return "Passwords do not match."
+
+    users = load_users()
+    if username in users:
+        return "That username is already taken."
+
+    salt = secrets.token_hex(16)
+    is_first_user = not users
+    users[username] = {"salt": salt, "hash": hash_password(password, salt)}
+    try:
+        save_users(users)
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+        if is_first_user and LEGACY_FILE.exists():
+            LEGACY_FILE.replace(user_data_path(username))  # keep old single-user progress
+    except OSError:
+        return "Could not save your account. Please try again."
+
+    st.session_state["user"] = username
+    return None
+
+
+def log_in(username: str, password: str) -> Optional[str]:
+    """Check credentials. Returns an error message, or None on success."""
+    username = username.strip().lower()
+    record = load_users().get(username)
+    try:
+        salt = record["salt"] if isinstance(record, dict) else "00" * 16
+        candidate = hash_password(password, salt)  # always hash, so timing looks the same
+        expected = record.get("hash", "") if isinstance(record, dict) else ""
+        if record and hmac.compare_digest(candidate, expected):
+            st.session_state["user"] = username
+            return None
+    except (KeyError, ValueError, TypeError):
+        pass
+    time.sleep(0.8)  # small delay slows down password guessing
+    return "Wrong username or password."
 
 
 # ----------------------------------------------------------------------------
@@ -558,6 +652,55 @@ def section_title(text: str) -> None:
 # ----------------------------------------------------------------------------
 # UI sections
 # ----------------------------------------------------------------------------
+def render_auth() -> None:
+    """Welcome screen with two tabs: log in or create an account."""
+    st.markdown(
+        '<div class="card hero"><div class="mascot">🐣</div>'
+        '<div class="section-title">Welcome!</div>'
+        '<div class="message">Create an account to save your streaks, XP and badges 💜</div></div>',
+        unsafe_allow_html=True,
+    )
+    login_tab, signup_tab = st.tabs(["🔑 Log in", "✨ Create account"])
+
+    with login_tab:
+        with st.form("login_form"):
+            username = st.text_input("Username", placeholder="Username", label_visibility="collapsed")
+            password = st.text_input(
+                "Password", type="password", placeholder="Password", label_visibility="collapsed"
+            )
+            submitted = st.form_submit_button("Log in 🔑")
+        if submitted:
+            error = log_in(username, password)
+            if error:
+                notice(error, "warn")
+            else:
+                st.rerun()
+
+    with signup_tab:
+        with st.form("signup_form"):
+            new_user = st.text_input(
+                "New username", placeholder="Pick a username (letters, numbers, _)",
+                label_visibility="collapsed",
+            )
+            new_pass = st.text_input(
+                "New password", type="password",
+                placeholder=f"Password (min {MIN_PASSWORD_LENGTH} characters)",
+                label_visibility="collapsed",
+            )
+            confirm = st.text_input(
+                "Confirm password", type="password", placeholder="Confirm password",
+                label_visibility="collapsed",
+            )
+            created = st.form_submit_button("Create my account ✨")
+        if created:
+            error = create_account(new_user, new_pass, confirm)
+            if error:
+                notice(error, "warn")
+            else:
+                flash("Account created! Welcome 🎉")
+                st.rerun()
+
+
 def render_setup(data: dict) -> None:
     """First launch: ask for the habit name (set once)."""
     st.markdown(
@@ -803,11 +946,22 @@ def render_progress(data: dict, today: date) -> None:
             unsafe_allow_html=True,
         )
 
+    section_title("👤 Account")
+    st.markdown(
+        f'<div class="notice info">Logged in as <b>{html.escape(current_user() or "")}</b></div>',
+        unsafe_allow_html=True,
+    )
+    if st.button("Log out 👋"):
+        st.session_state.clear()
+        st.rerun()
+
     section_title("⚠️ Danger zone")
     confirm = st.checkbox("Delete all progress and start a new habit")
     if st.button("Reset habit", disabled=not confirm):
         save_data(copy.deepcopy(DEFAULT_DATA))
-        st.session_state.clear()
+        for key in list(st.session_state.keys()):
+            if key != "user":  # stay logged in
+                del st.session_state[key]
         st.rerun()
 
 
@@ -836,6 +990,10 @@ def main() -> None:
 
     for message in st.session_state.pop("flash", []):
         st.toast(message)
+
+    if not current_user():
+        render_auth()
+        return
 
     today = date.today()
     data = load_data()
