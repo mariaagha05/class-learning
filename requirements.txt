@@ -1,5 +1,2 @@
-streamlit
-groq
-pydantic
-pillow
-python-dotenv
+streamlit>=1.30.0
+groq>=0.9.0
