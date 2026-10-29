@@ -1,6 +1,7 @@
 """Habit Streak Counter+ : track one habit, play quizzes, earn XP and badges.
 
-UI: Streamlit | Storage: local JSON | AI (quizzes, tips, messages): Groq (optional)
+UI: Streamlit (cute pastel theme, readable in phone dark mode too)
+Storage: local JSON | AI (quizzes, tips, messages): Groq (optional)
 Run with:  streamlit run app.py
 """
 
@@ -25,14 +26,14 @@ XP_PER_LEVEL = 100
 QUIZ_LENGTH = 5
 XP_PER_CORRECT = 5
 TOPIC_HABIT = "About my habit"
-TOPIC_SCIENCE = "Habit-building science"
+TOPIC_SCIENCE = "Habit science"
 
 DEFAULT_DATA = {
     "habit_name": "",
     "current_streak": 0,
     "best_streak": 0,
     "last_done": None,        # ISO date string
-    "history": [],            # list of ISO dates when the habit was completed
+    "history": [],            # ISO dates when the habit was completed
     "xp": 0,
     "quizzes_taken": 0,
     "perfect_quizzes": 0,
@@ -140,6 +141,19 @@ def check_badges(data: dict) -> list:
     return unlocked
 
 
+def mascot_for(streak: int):
+    """Your cute buddy grows as the streak grows. Returns (emoji, caption)."""
+    if streak == 0:
+        return "🥚", "Your buddy is waiting to hatch"
+    if streak < 3:
+        return "🐣", "Your buddy just hatched!"
+    if streak < 7:
+        return "🐥", "Your buddy is growing!"
+    if streak < 30:
+        return "🦊", "Your buddy is thriving!"
+    return "🦄", "Your buddy is legendary!"
+
+
 def flash(message: str) -> None:
     """Queue a toast message to show after the next rerun."""
     st.session_state.setdefault("flash", []).append(message)
@@ -185,14 +199,14 @@ def ask_groq(system: str, user: str, json_mode: bool = False, max_tokens: int = 
 
 def fallback_message(streak: int) -> str:
     if streak == 0:
-        return "Every journey starts with one small step. 🌱"
+        return "Every journey starts with one small step 🌱"
     if streak < 3:
-        return "Great start! Keep the momentum going. 💪"
+        return "Great start! Keep the momentum going 💪"
     if streak < 7:
         return "You're building a real habit now! 🔥"
     if streak < 30:
-        return "You're on fire! Don't break the chain. 🚀"
-    return "Unstoppable! This habit is part of you now. 🏆"
+        return "You're on fire! Don't break the chain 🚀"
+    return "Unstoppable! This habit is part of you now 🏆"
 
 
 def get_motivation(habit: str, streak: int) -> str:
@@ -357,53 +371,188 @@ def generate_quiz(habit: str, topic: str):
 
 
 # ----------------------------------------------------------------------------
-# Styling
+# Styling: cute pastel look. Every text/background colour is forced so the app
+# stays readable even when the phone or browser is in dark mode.
 # ----------------------------------------------------------------------------
 CSS = """
 <style>
-#MainMenu, footer, header {visibility: hidden;}
-.stApp {background: #F6F7FB;}
-.block-container {max-width: 520px; padding-top: 2rem;}
+@import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&display=swap');
 
-.habit-name {text-align: center; font-size: 1.5rem; font-weight: 700; color: #2D3142;}
-.level-line {text-align: center; font-size: 0.85rem; color: #6C63FF; font-weight: 600;
-             margin-bottom: 0.3rem;}
-.streak-number {text-align: center; font-size: 6.5rem; font-weight: 800; line-height: 1;
-                color: #6C63FF; margin: 1rem 0 0 0;}
-.streak-label {text-align: center; font-size: 1.1rem; color: #4F5D75; margin-bottom: 0.8rem;}
-.message {text-align: center; font-size: 1rem; color: #4F5D75; min-height: 2.6rem;
-          margin-bottom: 0.8rem;}
-.best {text-align: center; font-size: 0.85rem; color: #9AA0B4; margin: 1rem 0;}
-.tip {background: #FFFFFF; border-left: 4px solid #6C63FF; border-radius: 10px;
-      padding: 0.8rem 1rem; color: #2D3142; font-size: 0.95rem;}
+:root {
+    color-scheme: light;
+    --ink: #3D3355;
+    --muted: #6E6490;
+    --pink: #FF8FB1;
+    --purple: #7B6CF6;
+    --line: #EADFFF;
+}
 
+/* ---- Background (forced light, even in phone dark mode) ---- */
+html, body, .stApp, [data-testid="stApp"], [data-testid="stAppViewContainer"], [data-testid="stMain"] {
+    background: linear-gradient(160deg, #FFF0F6 0%, #F3EEFF 55%, #E9F6FF 100%) !important;
+    background-attachment: fixed !important;
+}
+#MainMenu, footer, [data-testid="stHeader"], [data-testid="stToolbar"],
+[data-testid="stDecoration"] {display: none !important;}
+.block-container {max-width: 520px; padding: 1.2rem 1rem 3rem !important;}
+
+/* ---- Text colours and font ---- */
+.stApp, .stApp .stMarkdown, .stApp p, .stApp li, .stApp label,
+.stApp h1, .stApp h2, .stApp h3 {color: var(--ink) !important;}
+.stApp, .stApp p, .stApp label, .stApp button, .stApp input, .stApp textarea {
+    font-family: 'Fredoka', 'Nunito', 'Segoe UI', system-ui, sans-serif !important;
+}
+[data-testid="stSpinner"] * {color: var(--ink) !important;}
+
+/* ---- Cards ---- */
+.card {background: #FFFFFF; border: 2px solid #F0E8FF; border-radius: 24px;
+       padding: 1.2rem 1rem; margin-bottom: 0.9rem;
+       box-shadow: 0 8px 24px rgba(123, 108, 246, 0.12);}
+.hero {text-align: center; background: linear-gradient(180deg, #FFFFFF 0%, #FFF5FA 100%);}
+.mascot {font-size: 3.6rem; line-height: 1; display: inline-block;
+         animation: bob 2.4s ease-in-out infinite;}
+@keyframes bob {0%, 100% {transform: translateY(0);} 50% {transform: translateY(-8px);}}
+.buddy {font-size: 0.8rem; color: var(--muted); margin-top: 0.2rem;}
+.streak-number {font-size: clamp(4.5rem, 22vw, 6rem); font-weight: 700; line-height: 1.05;
+                color: var(--purple); margin-top: 0.4rem;}
+.streak-label {font-size: 1.1rem; color: var(--muted); margin-bottom: 0.6rem;}
+.message {font-size: 1rem; font-weight: 500; color: var(--ink); min-height: 2.4rem;}
+
+/* ---- Top bar + XP bar ---- */
+.topbar {display: flex; align-items: center; justify-content: space-between; gap: 0.6rem;
+         margin-bottom: 0.5rem;}
+.habit-name {font-size: 1.4rem; font-weight: 700; color: var(--ink);}
+.level-pill {background: linear-gradient(90deg, #E8629A, #7B6CF6); color: #FFFFFF;
+             border-radius: 999px; padding: 0.25rem 0.85rem; font-size: 0.85rem;
+             font-weight: 600; white-space: nowrap;}
+.xp-bar {height: 12px; background: #FFFFFF; border: 2px solid var(--line);
+         border-radius: 999px; overflow: hidden;}
+.xp-fill {height: 100%; background: linear-gradient(90deg, #FFB3CB, #9D8CFF);
+          border-radius: 999px;}
+.xp-text {font-size: 0.75rem; color: var(--muted); text-align: right;
+          margin: 0.2rem 0 0.8rem;}
+
+/* ---- Chips, tip, notices ---- */
+.chip-row {text-align: center; margin: 0.8rem 0;}
+.chip {display: inline-block; background: #FFFFFF; border: 2px solid var(--line);
+       color: var(--ink); border-radius: 999px; padding: 0.3rem 0.9rem; font-size: 0.9rem;}
+.tip {background: #FFF8DC; border: 2px solid #FFE9A8; border-radius: 20px;
+      padding: 0.8rem 1rem; color: var(--ink); font-size: 0.95rem;}
+.notice {border-radius: 16px; padding: 0.75rem 1rem; margin: 0.6rem 0; font-size: 0.95rem;
+         color: var(--ink); background: #FFFFFF; border: 2px solid var(--line);}
+.notice.info {background: #EAF3FF; border-color: #CFE3FF;}
+.notice.warn {background: #FFF4DB; border-color: #FFE3A3;}
+.section-title {font-size: 1.25rem; font-weight: 700; color: var(--ink); margin: 0.4rem 0 0.5rem;}
+.hint {font-size: 0.85rem; color: var(--muted); text-align: center; margin: 0.3rem 0 0.8rem;}
+
+/* ---- Buttons ---- */
 div.stButton > button, div[data-testid="stFormSubmitButton"] > button {
-    width: 100%; padding: 0.8rem 0; font-size: 1.05rem; font-weight: 600;
-    color: #FFFFFF; background: #6C63FF; border: none; border-radius: 14px;
-    transition: all 0.15s ease;
+    width: 100%; padding: 0.8rem 0; border: none; border-radius: 999px;
+    background: linear-gradient(90deg, #E8629A, #7B6CF6) !important; color: #FFFFFF !important;
+    font-weight: 600; box-shadow: 0 6px 16px rgba(123, 108, 246, 0.3);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+div.stButton > button p, div[data-testid="stFormSubmitButton"] > button p {
+    color: #FFFFFF !important; font-size: 1.05rem; font-weight: 600; margin: 0;
 }
 div.stButton > button:hover, div[data-testid="stFormSubmitButton"] > button:hover {
-    background: #5750D9; color: #FFFFFF; transform: translateY(-1px);
-    box-shadow: 0 6px 16px rgba(108, 99, 255, 0.35);
+    transform: translateY(-2px) scale(1.01); box-shadow: 0 10px 22px rgba(123, 108, 246, 0.4);
 }
 div.stButton > button:disabled {
-    background: #D9DBE9; color: #8A8FA8; box-shadow: none; transform: none;
-    cursor: not-allowed;
+    background: #DDF6E8 !important; box-shadow: none; transform: none; cursor: not-allowed;
 }
+div.stButton > button:disabled p {color: #2F7D55 !important;}
 
-.cal {display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; margin: 0.5rem 0 1rem;}
+/* ---- Tabs as pills ---- */
+div[data-baseweb="tab-list"] {gap: 6px; background: rgba(255, 255, 255, 0.75);
+    padding: 6px; border-radius: 20px;}
+div[data-baseweb="tab-highlight"], div[data-baseweb="tab-border"] {display: none !important;}
+button[data-baseweb="tab"] {flex: 1; height: auto; padding: 0.5rem 0.2rem;
+    border-radius: 14px; background: transparent !important;}
+button[data-baseweb="tab"] p {color: var(--muted) !important; font-weight: 600; font-size: 0.85rem;}
+button[data-baseweb="tab"][aria-selected="true"] {
+    background: linear-gradient(90deg, #FF8FB1, #9D8CFF) !important;}
+button[data-baseweb="tab"][aria-selected="true"] p {color: #FFFFFF !important;}
+
+/* ---- Quiz: each question is a card, each option is a pill ---- */
+div[data-testid="stRadio"] {background: #FFFFFF; border: 2px solid var(--line);
+    border-radius: 22px; padding: 0.9rem 0.9rem 0.6rem; margin-bottom: 0.8rem;
+    box-shadow: 0 6px 18px rgba(123, 108, 246, 0.08);}
+div[data-testid="stRadio"] [data-testid="stWidgetLabel"] p {
+    font-weight: 700; font-size: 1.05rem; color: var(--ink) !important;}
+div[role="radiogroup"] label {background: #F8F4FF; border: 2px solid var(--line);
+    border-radius: 14px; padding: 0.5rem 0.75rem; margin: 0.2rem 0;
+    transition: all 0.12s ease;}
+div[role="radiogroup"] label:hover {border-color: var(--pink);}
+div[role="radiogroup"] label:has(input:checked) {background: #FFE6EF; border-color: var(--pink);}
+div[role="radiogroup"] label p {color: var(--ink) !important; font-size: 0.98rem;}
+[data-testid="stForm"] {border: none !important; padding: 0 !important;
+    background: transparent !important;}
+
+.banner {background: linear-gradient(135deg, #FFE1EC, #E6DEFF); border-radius: 22px;
+         padding: 1rem; text-align: center; margin-bottom: 0.8rem; color: var(--ink);}
+.banner b {font-size: 1.3rem; color: var(--ink);}
+.score {text-align: center; background: linear-gradient(135deg, #FFE1EC, #DDEBFF);
+        border-radius: 24px; padding: 1.1rem; margin-bottom: 0.8rem; color: var(--ink);}
+.score-big {font-size: 2.8rem; font-weight: 700; color: var(--purple); line-height: 1.1;}
+.res {border-radius: 18px; padding: 0.8rem 0.9rem; margin-bottom: 0.6rem; color: var(--ink);}
+.res.ok {background: #E4F8EC; border: 2px solid #BDEBD0;}
+.res.bad {background: #FFE9EE; border: 2px solid #FFC9D6;}
+.res-q {font-weight: 600; color: var(--ink);}
+.res-a {font-size: 0.88rem; margin-top: 0.3rem; color: var(--ink);}
+
+/* ---- Inputs ---- */
+div[data-baseweb="input"], div[data-baseweb="textarea"] {
+    border: 2px solid var(--line) !important; border-radius: 14px !important;}
+div[data-baseweb="input"], div[data-baseweb="base-input"], div[data-baseweb="textarea"] {
+    background: #FFFFFF !important;}
+.stApp input, .stApp textarea {background: #FFFFFF !important; color: var(--ink) !important;
+    -webkit-text-fill-color: var(--ink) !important; caret-color: var(--ink);}
+.stApp input::placeholder, .stApp textarea::placeholder {
+    color: #A79DC4 !important; -webkit-text-fill-color: #A79DC4 !important;}
+
+/* ---- Toast ---- */
+[data-testid="stToast"] {background: #FFFFFF !important; border: 2px solid var(--line);
+    border-radius: 16px;}
+[data-testid="stToast"] * {color: var(--ink) !important;}
+
+/* ---- Stats, calendar, notes, badges ---- */
+.stats {display: flex; gap: 0.6rem; margin-bottom: 0.8rem;}
+.stat {flex: 1; background: #FFFFFF; border: 2px solid var(--line); border-radius: 18px;
+       padding: 0.7rem 0.3rem; text-align: center;}
+.stat b {display: block; font-size: 1.5rem; color: var(--purple);}
+.stat span {font-size: 0.75rem; color: var(--muted);}
+
+.cal {display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; margin: 0.4rem 0 1rem;}
 .cal-cell {aspect-ratio: 1; display: flex; align-items: center; justify-content: center;
-           border-radius: 8px; background: #E6E8F2; color: #9AA0B4; font-size: 0.75rem;}
-.cal-cell.done {background: #6C63FF; color: #FFFFFF; font-weight: 700;}
-.cal-cell.today {outline: 2px solid #2D3142;}
+           border-radius: 10px; background: #FFFFFF; border: 2px solid var(--line);
+           color: var(--muted); font-size: 0.75rem;}
+.cal-cell.done {background: linear-gradient(135deg, #FF8FB1, #9D8CFF); border-color: transparent;
+                color: #FFFFFF; font-weight: 700;}
+.cal-cell.today {outline: 2px solid var(--ink); outline-offset: 1px;}
 
-.badge {border-radius: 12px; padding: 0.7rem 0.8rem; margin-bottom: 0.6rem;
-        min-height: 4.2rem; font-size: 0.9rem;}
-.badge small {display: block; margin-top: 0.2rem;}
-.badge.earned {background: #FFFFFF; color: #2D3142; border: 2px solid #6C63FF;}
-.badge.locked {background: #E6E8F2; color: #9AA0B4; filter: grayscale(1);}
+.note {background: #FFFFFF; border: 2px solid var(--line); border-radius: 16px;
+       padding: 0.6rem 0.9rem; margin-bottom: 0.5rem; color: var(--ink); font-size: 0.92rem;}
+.note small {display: block; color: var(--muted); margin-bottom: 0.1rem;}
+
+.badge {border-radius: 18px; padding: 0.75rem 0.8rem; margin-bottom: 0.6rem;
+        min-height: 4.4rem; font-size: 0.92rem;}
+.badge small {display: block; margin-top: 0.2rem; font-size: 0.78rem;}
+.badge.earned {background: #FFFFFF; color: var(--ink); border: 2px solid var(--pink);
+               box-shadow: 0 6px 16px rgba(255, 143, 177, 0.25);}
+.badge.earned small {color: var(--muted);}
+.badge.locked {background: #EFEAF8; color: #7D7399; border: 2px dashed #D4C9EE;}
 </style>
 """
+
+
+def notice(text: str, kind: str = "info") -> None:
+    """A small rounded message box (kind: info or warn)."""
+    st.markdown(f'<div class="notice {kind}">{html.escape(text)}</div>', unsafe_allow_html=True)
+
+
+def section_title(text: str) -> None:
+    st.markdown(f'<div class="section-title">{html.escape(text)}</div>', unsafe_allow_html=True)
 
 
 # ----------------------------------------------------------------------------
@@ -411,43 +560,50 @@ div.stButton > button:disabled {
 # ----------------------------------------------------------------------------
 def render_setup(data: dict) -> None:
     """First launch: ask for the habit name (set once)."""
-    st.markdown('<div class="habit-name">🔥 Habit Streak Counter+</div>', unsafe_allow_html=True)
     st.markdown(
-        '<div class="message">Pick ONE habit to track. Then build streaks, play quizzes '
-        "and earn badges!</div>",
+        '<div class="card hero"><div class="mascot">🥚</div>'
+        '<div class="section-title">Hatch a new habit!</div>'
+        '<div class="message">Pick ONE habit to track. Build streaks, play quizzes '
+        "and earn badges ✨</div></div>",
         unsafe_allow_html=True,
     )
     name = st.text_input("Habit name", placeholder="e.g. Drink Water", label_visibility="collapsed")
-    if st.button("Start tracking"):
+    if st.button("Start tracking 🚀"):
         if name.strip():
             data["habit_name"] = name.strip()[:40]
             save_data(data)
             flash("Habit saved! Try your first quiz in the Quiz tab 🧠")
             st.rerun()
         else:
-            st.warning("Please enter a habit name.")
+            notice("Please enter a habit name first 🙂", "warn")
 
 
 def render_header(data: dict) -> None:
-    in_level = data["xp"] % XP_PER_LEVEL
+    xp_in_level = data["xp"] % XP_PER_LEVEL
     st.markdown(
-        f'<div class="habit-name">{html.escape(data["habit_name"])}</div>'
-        f'<div class="level-line">Level {get_level(data["xp"])} · {in_level}/{XP_PER_LEVEL} XP</div>',
+        f'<div class="topbar"><div class="habit-name">{html.escape(data["habit_name"])}</div>'
+        f'<div class="level-pill">⭐ Level {get_level(data["xp"])}</div></div>'
+        f'<div class="xp-bar"><div class="xp-fill" style="width:{xp_in_level}%"></div></div>'
+        f'<div class="xp-text">{xp_in_level}/{XP_PER_LEVEL} XP</div>',
         unsafe_allow_html=True,
     )
-    st.progress(in_level / XP_PER_LEVEL)
 
 
 def render_home(data: dict, today: date) -> None:
     done_today = is_done_today(data, today)
-
-    st.markdown(f'<div class="streak-number">{data["current_streak"]}</div>', unsafe_allow_html=True)
-    st.markdown('<div class="streak-label">day streak</div>', unsafe_allow_html=True)
-
+    emoji, buddy_text = mascot_for(data["current_streak"])
     message = html.escape(get_motivation(data["habit_name"], data["current_streak"]))
-    st.markdown(f'<div class="message">{message}</div>', unsafe_allow_html=True)
 
-    label = "Done for today ✓" if done_today else "Done Today"
+    st.markdown(
+        f'<div class="card hero"><div class="mascot">{emoji}</div>'
+        f'<div class="buddy">{buddy_text}</div>'
+        f'<div class="streak-number">{data["current_streak"]}</div>'
+        f'<div class="streak-label">day streak</div>'
+        f'<div class="message">{message}</div></div>',
+        unsafe_allow_html=True,
+    )
+
+    label = "Done for today ✓" if done_today else "Done Today 🎉"
     if st.button(label, disabled=done_today):
         gained = mark_done(data, today)
         new_badges = check_badges(data)
@@ -458,7 +614,7 @@ def render_home(data: dict, today: date) -> None:
         st.rerun()
 
     st.markdown(
-        f'<div class="best">Best streak: {data["best_streak"]} days</div>',
+        f'<div class="chip-row"><span class="chip">🏅 Best streak: {data["best_streak"]} days</span></div>',
         unsafe_allow_html=True,
     )
 
@@ -466,7 +622,7 @@ def render_home(data: dict, today: date) -> None:
     st.markdown(f'<div class="tip">💡 <b>Today\'s tip:</b> {tip}</div>', unsafe_allow_html=True)
 
     if done_today:
-        st.info("Nice work! Keep your brain busy with a quick quiz in the Quiz tab 🧠")
+        notice("Nice work! Keep your brain busy with a quick quiz 🧠", "info")
 
 
 def grade_quiz(data: dict, quiz: dict, answers: list, today: date) -> dict:
@@ -502,12 +658,52 @@ def grade_quiz(data: dict, quiz: dict, answers: list, today: date) -> dict:
     return {"score": score, "total": total, "xp": xp_gained, "earns_xp": earns_xp, "details": details}
 
 
+def render_quiz_result(result: dict) -> None:
+    score, total = result["score"], result["total"]
+    if score == total:
+        face, line = "🎉", "Perfect score! You're a genius!"
+    elif score >= total / 2:
+        face, line = "🌟", "Great job! Keep it up!"
+    else:
+        face, line = "💪", "Nice try! You'll get it next time!"
+    xp_text = f"+{result['xp']} XP earned ✨" if result["earns_xp"] else "Practice round (no XP)"
+
+    st.markdown(
+        f'<div class="score"><div style="font-size:2.4rem">{face}</div>'
+        f'<div class="score-big">{score}/{total}</div>'
+        f'<div style="font-weight:600">{line}</div>'
+        f'<div class="hint" style="margin-bottom:0">{xp_text}</div></div>',
+        unsafe_allow_html=True,
+    )
+    if score == total:
+        st.balloons()
+
+    for i, d in enumerate(result["details"], start=1):
+        css, icon = ("ok", "✅") if d["is_correct"] else ("bad", "❌")
+        wrong = (
+            f'<div class="res-a">Your answer: {html.escape(d["chosen"])}</div>'
+            if not d["is_correct"] else ""
+        )
+        st.markdown(
+            f'<div class="res {css}"><div class="res-q">{icon} {i}. {html.escape(d["question"])}</div>'
+            f"{wrong}"
+            f'<div class="res-a">💡 {html.escape(d["correct"])}. {html.escape(d["explanation"])}</div></div>',
+            unsafe_allow_html=True,
+        )
+    st.markdown('<div class="hint">Tap “New quiz” above to play again 🎲</div>', unsafe_allow_html=True)
+
+
 def render_quiz(data: dict, today: date) -> None:
-    st.subheader("🧠 Brain Break")
-    topic = st.radio("Topic", [TOPIC_HABIT, TOPIC_SCIENCE], horizontal=True)
-    st.caption(
-        f"First quiz of the day earns +{XP_PER_CORRECT} XP per correct answer. "
-        "More quizzes are free practice."
+    st.markdown(
+        '<div class="banner"><div style="font-size:2rem">🧠✨</div><b>Brain Break</b>'
+        '<div class="hint" style="margin-bottom:0">Quick quiz time! Pick a topic and play.</div></div>',
+        unsafe_allow_html=True,
+    )
+    topic = st.radio("Topic", [TOPIC_HABIT, TOPIC_SCIENCE], horizontal=True, label_visibility="collapsed")
+    st.markdown(
+        f'<div class="hint">First quiz of the day earns +{XP_PER_CORRECT} XP per correct answer. '
+        "More quizzes are free practice.</div>",
+        unsafe_allow_html=True,
     )
 
     if st.button("🎲 New quiz"):
@@ -523,38 +719,31 @@ def render_quiz(data: dict, today: date) -> None:
 
     quiz = st.session_state.get("quiz")
     if not quiz:
-        st.info("Press **New quiz** to start.")
+        notice("Press “New quiz” to start 🎲", "info")
         return
     if not quiz["used_ai"]:
-        st.caption("AI quiz unavailable right now, so here's a general habit quiz.")
+        st.markdown(
+            '<div class="hint">AI quiz unavailable right now, so here is a general habit quiz 📚</div>',
+            unsafe_allow_html=True,
+        )
 
     result = st.session_state.get("quiz_result")
-    if result is None:
-        with st.form(f"quiz_form_{quiz['id']}"):
-            answers = [
-                st.radio(f"{i + 1}. {q['question']}", q["options"], index=None, key=f"q{quiz['id']}_{i}")
-                for i, q in enumerate(quiz["questions"])
-            ]
-            submitted = st.form_submit_button("Submit answers")
-        if submitted:
-            if any(a is None for a in answers):
-                st.warning("Please answer every question first.")
-            else:
-                st.session_state["quiz_result"] = grade_quiz(data, quiz, answers, today)
-                st.rerun()
+    if result is not None:
+        render_quiz_result(result)
         return
 
-    # Show results
-    suffix = f"+{result['xp']} XP" if result["earns_xp"] else "practice round, no XP"
-    st.success(f"You scored {result['score']}/{result['total']} ({suffix})")
-    if result["score"] == result["total"]:
-        st.balloons()
-    for i, d in enumerate(result["details"], start=1):
-        icon = "✅" if d["is_correct"] else "❌"
-        st.markdown(f"**{icon} {i}. {d['question']}**")
-        if not d["is_correct"]:
-            st.caption(f"Your answer: {d['chosen']}")
-        st.caption(f"Correct answer: {d['correct']}. {d['explanation']}")
+    with st.form(f"quiz_form_{quiz['id']}"):
+        answers = [
+            st.radio(f"{i + 1}. {q['question']}", q["options"], index=None, key=f"q{quiz['id']}_{i}")
+            for i, q in enumerate(quiz["questions"])
+        ]
+        submitted = st.form_submit_button("Submit answers ✅")
+    if submitted:
+        if any(a is None for a in answers):
+            notice("Please answer every question first 🙂", "warn")
+        else:
+            st.session_state["quiz_result"] = grade_quiz(data, quiz, answers, today)
+            st.rerun()
 
 
 def calendar_html(history: list, today: date) -> str:
@@ -573,24 +762,28 @@ def calendar_html(history: list, today: date) -> str:
 
 
 def render_progress(data: dict, today: date) -> None:
-    st.subheader("📅 Your Progress")
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Total days", len(data["history"]))
-    col2.metric("Best streak", data["best_streak"])
-    col3.metric("Quizzes", data["quizzes_taken"])
-
-    st.caption("Last 28 days")
+    section_title("📅 Your Progress")
+    st.markdown(
+        f'<div class="stats">'
+        f'<div class="stat"><b>{len(data["history"])}</b><span>Total days</span></div>'
+        f'<div class="stat"><b>{data["best_streak"]}</b><span>Best streak</span></div>'
+        f'<div class="stat"><b>{data["quizzes_taken"]}</b><span>Quizzes</span></div></div>',
+        unsafe_allow_html=True,
+    )
+    st.markdown('<div class="hint" style="text-align:left">Last 28 days (colored = done 💜)</div>', unsafe_allow_html=True)
     st.markdown(calendar_html(data["history"], today), unsafe_allow_html=True)
 
-    st.subheader("📓 Journal")
+    section_title("📓 Journal")
     today_key = today.isoformat()
     note = st.text_area(
         "How did it go today?",
         value=data["notes"].get(today_key, ""),
+        placeholder="How did it go today?",
+        label_visibility="collapsed",
         max_chars=280,
         height=90,
     )
-    if st.button("Save note"):
+    if st.button("Save note 💌"):
         if note.strip():
             is_new = today_key not in data["notes"]
             data["notes"][today_key] = note.strip()
@@ -602,24 +795,29 @@ def render_progress(data: dict, today: date) -> None:
             save_data(data)
             st.rerun()
         else:
-            st.warning("Write something first.")
+            notice("Write something first 🙂", "warn")
 
-    recent = sorted(data["notes"].items(), reverse=True)[:5]
-    for day_key, text in recent:
-        st.markdown(f"**{day_key}**: {text}")
+    for day_key, text in sorted(data["notes"].items(), reverse=True)[:5]:
+        st.markdown(
+            f'<div class="note"><small>{html.escape(day_key)}</small>{html.escape(text)}</div>',
+            unsafe_allow_html=True,
+        )
 
-    with st.expander("⚠️ Danger zone"):
-        confirm = st.checkbox("I want to delete all progress and start a new habit")
-        if st.button("Reset habit", disabled=not confirm):
-            save_data(copy.deepcopy(DEFAULT_DATA))
-            st.session_state.clear()
-            st.rerun()
+    section_title("⚠️ Danger zone")
+    confirm = st.checkbox("Delete all progress and start a new habit")
+    if st.button("Reset habit", disabled=not confirm):
+        save_data(copy.deepcopy(DEFAULT_DATA))
+        st.session_state.clear()
+        st.rerun()
 
 
 def render_badges(data: dict) -> None:
     earned = set(data["badges"])
-    st.subheader("🏅 Badges")
-    st.caption(f"{len(earned)}/{len(BADGES)} unlocked")
+    section_title("🏅 Badges")
+    st.markdown(
+        f'<div class="hint" style="text-align:left">{len(earned)}/{len(BADGES)} unlocked</div>',
+        unsafe_allow_html=True,
+    )
     columns = st.columns(2)
     for index, (badge_id, (name, description, _)) in enumerate(BADGES.items()):
         css = "badge earned" if badge_id in earned else "badge locked"
@@ -650,7 +848,7 @@ def main() -> None:
 
     render_header(data)
     home_tab, quiz_tab, progress_tab, badges_tab = st.tabs(
-        ["🏠 Home", "🧠 Quiz", "📅 Progress", "🏅 Badges"]
+        ["🏠 Home", "🧠 Quiz", "📅 Stats", "🏅 Badges"]
     )
     with home_tab:
         render_home(data, today)
